@@ -263,7 +263,7 @@ void atualizarTela() {
     return;
   }
   if (millis() < AQUECIMENTO_CO2_MS) {
-    tela.printf("Aquecendo sensor %lus\n", (AQUECIMENTO_CO2_MS - millis()) / 1000);
+    tela.printf("Aquecendo sensor %lus\n", (unsigned long)((AQUECIMENTO_CO2_MS - millis()) / 1000));
   } else if (falhaSensor) {
     tela.println("FALHA NO SENSOR CO2");
   } else {
