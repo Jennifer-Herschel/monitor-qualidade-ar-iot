@@ -1,0 +1,22 @@
+digraph A {
+  graph [rankdir=LR, fontname="Arial", dpi=200, nodesep=0.25, ranksep=0.55, compound=true, bgcolor="white"];
+  node [fontname="Arial", fontsize=10.5, shape=box, style="rounded,filled", fillcolor="#eef3f8", color="#3b5b7d"];
+  edge [fontname="Arial", fontsize=9.5, color="#3b5b7d", arrowsize=0.7];
+  subgraph cluster_p { label="Camada de percepção (simulador Wokwi / bancada)"; fontsize=11; style="rounded,dashed"; color="#7a8a9a";
+    s1 [label="MH-Z19B\nCO₂ (UART2)"]; s2 [label="DHT22\ntemp. e umidade"];
+    esp [label="ESP32 DevKit V1\nESP32-WROOM-32\n(Wi-Fi 802.11 b/g/n + pilha TCP/IP)", fillcolor="#d7e6f5", penwidth=1.6];
+    a1 [label="Relé + ventoinha"]; a2 [label="LEDs (semáforo)"]; a3 [label="Buzzer"]; a4 [label="Display OLED"]; b1 [label="Botão"];
+    {s1 s2 b1} -> esp; esp -> {a1 a2 a3 a4};
+  }
+  subgraph cluster_r { label="Camada de rede"; fontsize=11; style="rounded,dashed"; color="#7a8a9a";
+    ap [label="Ponto de acesso Wi-Fi\n(Wokwi-GUEST)"]; net [label="Internet\n(TCP/IP)", shape=ellipse, fillcolor="#f4f4f4"];
+  }
+  subgraph cluster_a { label="Camada de aplicação"; fontsize=11; style="rounded,dashed"; color="#7a8a9a";
+    br [label="Broker MQTT público\nbroker.hivemq.com\nTCP 1883 / WSS 8884", fillcolor="#fff1d6", color="#a07a00", penwidth=1.6];
+    pn [label="Painel web (navegador)\nGitHub Pages + MQTT.js\nleituras, comandos, log\ne medição de tempos"];
+  }
+  esp -> ap [label="Wi-Fi", dir=both];
+  ap -> net [dir=both];
+  net -> br [label="MQTT sobre TCP\n(porta 1883)", dir=both];
+  br -> pn [label="MQTT sobre WebSocket\nseguro (TLS, 8884)", dir=both];
+}

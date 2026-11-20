@@ -1,0 +1,38 @@
+digraph G {
+  graph [rankdir=TB, fontname="Arial", nodesep=0.35, ranksep=0.32, dpi=200, bgcolor="white"];
+  node  [fontname="Arial", fontsize=11, shape=box, style="rounded,filled", fillcolor="#eef3f8", color="#3b5b7d", penwidth=1.2];
+  edge  [fontname="Arial", fontsize=10, color="#3b5b7d", arrowsize=0.7];
+  ini  [label="Início", shape=ellipse, fillcolor="#d7e6f5"];
+  set  [label="Configura pinos, UART2 (MH-Z19B),\nDHT22, display OLED, Wi-Fi e cliente MQTT\nRelé começa DESLIGADO"];
+  wifi [label="Wi-Fi conectado?", shape=diamond, fillcolor="#fff6dc", color="#a07a00"];
+  recw [label="Tenta reconectar\n(a cada 10 s)"];
+  mq   [label="MQTT conectado?", shape=diamond, fillcolor="#fff6dc", color="#a07a00"];
+  conm [label="Conecta ao broker com testamento\n(status = offline), publica online\ne assina os tópicos de comando"];
+  msg  [label="mqtt.loop(): trata comandos recebidos\n(ventilação, buzzer, LEDs, display,\nconfiguração, ping) e confirma a ação"];
+  bot  [label="Lê o botão: toque curto silencia o alarme;\ntoque longo (3 s) alterna AUTO/MANUAL"];
+  tmp  [label="Passou o intervalo\nde leitura?", shape=diamond, fillcolor="#fff6dc", color="#a07a00"];
+  co2  [label="Envia FF 01 86 ... 79 pela UART2\ne lê a resposta de 9 bytes"];
+  ok   [label="Resposta válida\n(checksum)?", shape=diamond, fillcolor="#fff6dc", color="#a07a00"];
+  fal  [label="Conta falha; na 3ª seguida:\nfalha de sensor, alerta MQTT\ne ventilação ligada por segurança"];
+  dht  [label="Lê temperatura e umidade (DHT22)"];
+  niv  [label="Classifica o ar:\nBOM, ATENÇÃO, SATURADO ou ALARME\n(em relação à referência externa)"];
+  pub  [label="Publica a medição em JSON\n(.../medicao) e, se o nível mudou,\num alerta (.../alerta)"];
+  aut  [label="Modo automático?", shape=diamond, fillcolor="#fff6dc", color="#a07a00"];
+  reg  [label="SATURADO por 15 s → liga o relé\nBOM → desliga o relé\n(respeitando o tempo mínimo no estado)"];
+  atu  [label="Atualiza LEDs (semáforo), buzzer (alarme)\ne display OLED"];
+  ini -> set -> wifi;
+  wifi -> recw [label=" não"]; recw -> bot;
+  wifi -> mq [label=" sim"];
+  mq -> conm [label=" não"]; conm -> msg;
+  mq -> msg [label=" sim"];
+  msg -> bot -> tmp;
+  tmp -> atu [label=" não"];
+  tmp -> co2 [label=" sim"];
+  co2 -> ok;
+  ok -> fal [label=" não"]; fal -> dht;
+  ok -> dht [label=" sim"];
+  dht -> niv -> pub -> aut;
+  aut -> reg [label=" sim"]; reg -> atu;
+  aut -> atu [label=" não"];
+  atu -> wifi [label="  próximo ciclo do loop()", style=dashed, constraint=false];
+}
