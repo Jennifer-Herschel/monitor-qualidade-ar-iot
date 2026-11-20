@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel MQTT - Qualidade do Ar</title>
+<!--
+  Painel web do projeto "Monitoramento da qualidade do ar com IoT".
+  Conecta ao broker MQTT por WebSocket seguro (WSS), mostra as medições do
+  ESP32, envia comandos aos atuadores e mede os tempos de resposta.
+  Autora: Jennifer Herschel Maia - 2026. Licença MIT.
+-->
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+<style>
+  :root { --bg:#f4f6f8; --card:#fff; --txt:#1d2733; --mut:#66727f; --bd:#dde3e9;
+          --ok:#2e9d4f; --warn:#d9a400; --bad:#d64535; --crit:#8e1b1b; --pri:#1f5fa8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 "Segoe UI", Roboto, Arial, sans-serif; background:var(--bg); color:var(--txt); }
+  header { background:#16324f; color:#fff; padding:14px 22px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; }
+  header h1 { font-size:18px; margin:0; font-weight:600; }
+  header small { color:#b9c8d8; }
+  .pill { display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600; background:#55606b; color:#fff; margin-left:6px; }
+  .pill.on { background:var(--ok); } .pill.off { background:var(--bad); }
+  main { max-width:1280px; margin:0 auto; padding:18px; display:grid; gap:16px; grid-template-columns:repeat(12,1fr); }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:14px 16px; }
+  .card h2 { font-size:14px; margin:0 0 10px; color:var(--mut); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .s12{grid-column:span 12}.s8{grid-column:span 8}.s6{grid-column:span 6}.s4{grid-column:span 4}.s3{grid-column:span 3}
+  @media (max-width:900px){ .s8,.s6,.s4,.s3{grid-column:span 12} }
+  .big { font-size:34px; font-weight:700; } .unit { font-size:15px; color:var(--mut); font-weight:500; }
+  .nivel { font-weight:700; padding:2px 8px; border-radius:6px; color:#fff; font-size:13px; }
+  .BOM{background:var(--ok)} .ATENCAO{background:var(--warn)} .SATURADO{background:var(--bad)} .ALARME{background:var(--crit)}
+  button { font:inherit; border:1px solid var(--pri); background:var(--pri); color:#fff; border-radius:7px; padding:7px 12px; cursor:pointer; margin:3px 4px 3px 0; }
+  button.sec { background:#fff; color:var(--pri); }
+  button:disabled { opacity:.5; cursor:default; }
+  input { font:inherit; padding:6px 8px; border:1px solid var(--bd); border-radius:6px; }
+  label { color:var(--mut); font-size:12px; display:block; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:5px 6px; border-bottom:1px solid var(--bd); vertical-align:top; }
+  th { color:var(--mut); font-weight:600; }
+  #log { max-height:330px; overflow:auto; font-family:Consolas, "Courier New", monospace; font-size:12px; }
+  #log td { white-space:nowrap; } #log td.p { white-space:normal; word-break:break-all; }
+  .in { color:#1f5fa8; } .out { color:#a5521f; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+  .mut { color:var(--mut); font-size:12px; }
+  #progresso { height:8px; background:#e6ebf0; border-radius:6px; overflow:hidden; margin:8px 0; }
+  #progresso div { height:100%; width:0; background:var(--pri); transition:width .2s; }
+  tr.media td { font-weight:700; background:#f1f5f9; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Monitor de Qualidade do Ar <small>ESP32 + MQTT</small></h1>
+    <small>Jennifer Herschel Maia &middot; Objetos Inteligentes Conectados &middot; Mackenzie</small>
+  </div>
+  <div>
+    Broker <span id="stBroker" class="pill off">desconectado</span>
+    Dispositivo <span id="stDisp" class="pill">sem notícia</span>
+  </div>
+</header>
+
+<main>
+  <section class="card s12">
+    <div class="row">
+      <div><label>Broker (WebSocket seguro)</label><input id="url" size="38" value="wss://broker.hivemq.com:8884/mqtt"></div>
+      <div><label>Tópico base</label><input id="base" size="30" value="mackenzie/jhm10720667/ar"></div>
+      <div><button id="btConectar">Conectar</button></div>
+      <div class="mut">O painel assina <code id="assinado">base/#</code> e publica os comandos com QoS 1.</div>
+    </div>
+  </section>
+
+  <section class="card s3"><h2>CO₂</h2><div class="big"><span id="vCO2">--</span> <span class="unit">ppm</span></div>
+    <div style="margin-top:6px">Nível: <span id="vNivel" class="nivel">--</span></div></section>
+  <section class="card s3"><h2>Temperatura</h2><div class="big"><span id="vTemp">--</span> <span class="unit">°C</span></div>
+    <div class="mut" id="vSeq">medição nº --</div></section>
+  <section class="card s3"><h2>Umidade relativa</h2><div class="big"><span id="vUmid">--</span> <span class="unit">%</span></div>
+    <div class="mut">faixa de conforto: 40 a 60%</div></section>
+  <section class="card s3"><h2>Ventilação (relé)</h2><div class="big" id="vRele">--</div>
+    <div class="mut">modo <b id="vModo">--</b> &middot; origem <span id="vOrigem">--</span></div></section>
+
+  <section class="card s8"><h2>CO₂ ao longo do tempo</h2><canvas id="grafico" height="120"></canvas></section>
+
+  <section class="card s4"><h2>Comandos</h2>
+    <div><b>Ventilação</b><br>
+      <button data-t="ventilacao/comando" data-c="ON">Ligar</button>
+      <button data-t="ventilacao/comando" data-c="OFF">Desligar</button>
+      <button class="sec" data-t="ventilacao/comando" data-c="AUTO">Automático</button></div>
+    <div style="margin-top:8px"><b>Buzzer</b><br>
+      <button data-t="alarme/comando" data-c="TESTE">Testar</button>
+      <button class="sec" data-t="alarme/comando" data-c="SILENCIAR">Silenciar alarme</button></div>
+    <div style="margin-top:8px"><b>LEDs</b><br>
+      <button data-t="leds/comando" data-c="TESTE">Testar LEDs</button></div>
+    <div style="margin-top:8px"><b>Display OLED</b><br>
+      <input id="txtDisplay" maxlength="20" size="16" value="Abra a janela!"> <button id="btDisplay">Enviar</button></div>
+    <div style="margin-top:8px"><b>Configuração</b> <span class="mut">(mensagem retida)</span>
+      <div class="row">
+        <div><label>Ref. externa (ppm)</label><input id="cRef" size="5" value="420"></div>
+        <div><label>Persistência (s)</label><input id="cPer" size="4" value="15"></div>
+        <div><label>Tempo mín. (s)</label><input id="cMin" size="4" value="30"></div>
+        <div><label>Leitura (s)</label><input id="cInt" size="4" value="5"></div>
+      </div>
+      <button class="sec" id="btConfig">Enviar configuração</button>
+      <div class="mut" id="vConfig"></div></div>
+  </section>
+
+  <section class="card s6"><h2>Alertas</h2>
+    <table><thead><tr><th>Hora</th><th>Tipo</th><th>Detalhe</th><th>CO₂</th></tr></thead><tbody id="alertas"></tbody></table></section>
+
+  <section class="card s6"><h2>Mensagens MQTT</h2>
+    <div id="log"><table><thead><tr><th>Hora</th><th></th><th>Tópico</th><th>Mensagem</th></tr></thead><tbody id="logBody"></tbody></table></div></section>
+
+  <section class="card s12"><h2>Medição dos tempos de resposta</h2>
+    <p class="mut" style="margin-top:0">Faz 4 medições para cada sensor e cada atuador.
+      Atuadores: tempo entre o envio do comando pelo painel e a ação no ESP32.
+      Sensores: tempo entre a detecção no ESP32 e o recebimento da mensagem no painel.
+      Os relógios do painel e do ESP32 são alinhados por mensagens de ping/pong antes de cada medida.</p>
+    <button id="btMedir">Iniciar medição</button>
+    <button class="sec" id="btCSV" disabled>Baixar CSV</button>
+    <button class="sec" id="btPNG" disabled>Baixar gráfico (PNG)</button>
+    <span id="stMedicao" class="mut"></span>
+    <div id="progresso"><div></div></div>
+    <div class="row" style="align-items:start">
+      <div style="flex:1 1 420px"><table><thead><tr><th>Núm. medida</th><th>Sensor/atuador</th><th>Tempo de resposta (ms)</th><th>Ida e volta (ms)</th></tr></thead><tbody id="tabMedidas"></tbody></table></div>
+      <div style="flex:1 1 520px"><canvas id="graficoTempos" height="210"></canvas></div>
+    </div>
+  </section>
+</main>
+
+<script>
+// ---------------------------------------------------------------------------
+// Estado e utilidades
+// ---------------------------------------------------------------------------
+let cliente = null, base = '';
+const agora = () => performance.timeOrigin + performance.now();   // relógio do painel (ms)
+const hora = (t = Date.now()) => new Date(t).toLocaleTimeString('pt-BR');
+const $ = id => document.getElementById(id);
+const esperas = new Map();          // id do comando -> {resolve, topico}
+const ouvintesMedicao = [];         // promessas aguardando a próxima medição
+let ultimoCfg = null;
+
+function registrarLog(dir, topico, msg) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${hora()}</td><td class="${dir === '↓' ? 'in' : 'out'}">${dir}</td><td>${topico.replace(base + '/', '')}</td><td class="p"></td>`;
+  tr.lastChild.textContent = msg;
+  const tb = $('logBody'); tb.prepend(tr);
+  while (tb.children.length > 80) tb.lastChild.remove();
+}
+
+function publicar(sub, msg, opts = {}) {
+  if (!cliente || !cliente.connected) { alert('Conecte ao broker primeiro.'); return; }
+  const t = `${base}/${sub}`;
+  cliente.publish(t, msg, { qos: 1, retain: !!opts.retain });
+  registrarLog('↑', t, msg);
+}
+
+// ---------------------------------------------------------------------------
+// Gráfico de CO2 em tempo real
+// ---------------------------------------------------------------------------
+const graf = new Chart($('grafico'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'CO₂ (ppm)', data: [], borderColor: '#1f5fa8', backgroundColor: 'rgba(31,95,168,.12)', fill: true, tension: .25, pointRadius: 2 },
+    { label: 'Limite NBR 17037 (ref. + 700)', data: [], borderColor: '#d64535', borderDash: [6, 4], pointRadius: 0 },
+    { label: 'Alarme (ref. + 1100)', data: [], borderColor: '#8e1b1b', borderDash: [2, 3], pointRadius: 0 } ] },
+  options: { animation: false, scales: { y: { title: { display: true, text: 'ppm' } } }, plugins: { legend: { position: 'bottom' } } }
+});
+
+function addPonto(m) {
+  const ref = ultimoCfg ? ultimoCfg.ref : 420;
+  const d = graf.data;
+  d.labels.push(hora());
+  d.datasets[0].data.push(m.co2);
+  d.datasets[1].data.push(ref + 700);
+  d.datasets[2].data.push(ref + 1100);
+  if (d.labels.length > 60) { d.labels.shift(); d.datasets.forEach(s => s.data.shift()); }
+  graf.update();
+}
+
+// ---------------------------------------------------------------------------
+// Conexão MQTT e tratamento das mensagens
+// ---------------------------------------------------------------------------
+$('btConectar').onclick = () => {
+  if (cliente) cliente.end(true);
+  base = $('base').value.trim().replace(/\/$/, '');
+  $('assinado').textContent = base + '/#';
+  cliente = mqtt.connect($('url').value.trim(), {
+    clientId: 'painel-' + Math.random().toString(16).slice(2, 10), clean: true,
+    reconnectPeriod: 2000, connectTimeout: 10000 });
+  cliente.on('connect', () => {
+    $('stBroker').textContent = 'conectado'; $('stBroker').className = 'pill on';
+    cliente.subscribe(base + '/#', { qos: 1 });
+  });
+  cliente.on('close', () => { $('stBroker').textContent = 'desconectado'; $('stBroker').className = 'pill off'; });
+  cliente.on('message', aoReceber);
+};
+
+function aoReceber(topico, buf) {
+  const tChegada = agora();
+  const txt = buf.toString();
+  const sub = topico.slice(base.length + 1);
+  let j = null; try { j = JSON.parse(txt); } catch (e) {}
+  if (sub !== 'pong' && sub !== 'ping') registrarLog('↓', topico, txt);
+
+  // confirmações com id (ping, comandos)
+  if (j && j.id && j.ms !== undefined && esperas.has(j.id)) { esperas.get(j.id)({ t: tChegada, ms: j.ms, msg: j }); esperas.delete(j.id); }
+
+  switch (sub) {
+    case 'medicao':
+      $('vCO2').textContent = j.co2; $('vTemp').textContent = j.temp ?? '--'; $('vUmid').textContent = j.umid ?? '--';
+      $('vNivel').textContent = j.nivel; $('vNivel').className = 'nivel ' + j.nivel;
+      $('vSeq').textContent = 'medição nº ' + j.seq;
+      addPonto(j);
+      while (ouvintesMedicao.length) ouvintesMedicao.shift()({ t: tChegada, m: j });
+      break;
+    case 'ventilacao/estado':
+      $('vRele').textContent = j.rele === 'ON' ? 'LIGADA' : 'DESLIGADA';
+      $('vRele').style.color = j.rele === 'ON' ? 'var(--ok)' : 'var(--mut)';
+      $('vModo').textContent = j.modo; $('vOrigem').textContent = j.origem;
+      break;
+    case 'status':
+      $('stDisp').textContent = txt; $('stDisp').className = 'pill ' + (txt === 'online' ? 'on' : 'off');
+      break;
+    case 'config/atual':
+      ultimoCfg = j;
+      $('vConfig').textContent = `Em uso: ref ${j.ref} ppm, saturado > ${j.limite_saturado}, alarme > ${j.limite_alarme}, persistência ${j.persist_s}s, tempo mínimo ${j.min_s}s, leitura a cada ${j.intervalo_s}s`;
+      break;
+    case 'alerta': {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${hora()}</td><td>${j.tipo}</td><td>${j.detalhe}</td><td>${j.co2}</td>`;
+      $('alertas').prepend(tr);
+      while ($('alertas').children.length > 15) $('alertas').lastChild.remove();
+      break; }
+  }
+}
+
+document.querySelectorAll('button[data-t]').forEach(b =>
+  b.onclick = () => publicar(b.dataset.t, JSON.stringify({ cmd: b.dataset.c, id: 'painel-' + Date.now() })));
+$('btDisplay').onclick = () => publicar('display/comando', JSON.stringify({ cmd: 'MSG', texto: $('txtDisplay').value, id: 'painel-' + Date.now() }));
+$('btConfig').onclick = () => publicar('config', JSON.stringify({
+  ref: +$('cRef').value, persist_s: +$('cPer').value, min_s: +$('cMin').value, intervalo_s: +$('cInt').value }), { retain: true });
+
+// ---------------------------------------------------------------------------
+// Medição dos tempos de resposta
+// ---------------------------------------------------------------------------
+const espera = ms => new Promise(r => setTimeout(r, ms));
+let contador = 0;
+const novoId = p => `${p}-${Date.now()}-${++contador}`;
+
+/** Publica e aguarda a confirmação com o mesmo id (ou estoura o tempo). */
+function enviarEAguardar(sub, corpo, limite = 8000) {
+  return new Promise((resolve, reject) => {
+    const id = corpo.id;
+    const to = setTimeout(() => { esperas.delete(id); reject(new Error('sem resposta: ' + sub)); }, limite);
+    esperas.set(id, r => { clearTimeout(to); resolve(r); });
+    const tEnvio = agora();
+    cliente.publish(`${base}/${sub}`, JSON.stringify(corpo), { qos: sub === 'ping' ? 0 : 1 });
+    if (sub !== 'ping') registrarLog('↑', `${base}/${sub}`, JSON.stringify(corpo));
+    corpo._tEnvio = tEnvio;
+  });
+}
+
+/**
+ * Alinhamento de relógios (como no NTP): manda 5 pings e fica com o de menor
+ * ida e volta. O instante do ESP32 (ms) corresponde ao meio do intervalo.
+ */
+async function sincronizar() {
+  let melhor = null;
+  for (let i = 0; i < 5; i++) {
+    const corpo = { cmd: 'PING', id: novoId('ping') };
+    const t0 = agora();
+    const r = await enviarEAguardar('ping', corpo, 4000);
+    const rtt = r.t - t0;
+    if (!melhor || rtt < melhor.rtt) melhor = { tc: (t0 + r.t) / 2, me: r.ms, rtt };
+  }
+  return melhor;
+}
+
+let s0 = null, taxa = 1;   // taxa = ms do ESP32 por ms do painel (simulação pode não rodar a 100%)
+/** Converte um instante do relógio do ESP32 para o relógio do painel. */
+function paraPainel(msEsp, s) { return s.tc + (msEsp - s.me) / taxa; }
+
+let resultados = [];
+const NOMES = {
+  co2: 'Sensor de CO₂ (MH-Z19B)', dht: 'Sensor DHT22 (temp./umidade)',
+  rele: 'Relé / ventoinha', buzzer: 'Buzzer', leds: 'LEDs indicadores', display: 'Display OLED' };
+
+function progresso(f, txt) { $('progresso').firstChild.style.width = (f * 100) + '%'; $('stMedicao').textContent = txt; }
+
+$('btMedir').onclick = async () => {
+  if (!cliente || !cliente.connected) { alert('Conecte ao broker primeiro.'); return; }
+  $('btMedir').disabled = true; resultados = [];
+  const total = 24; let feitos = 0;
+  try {
+    progresso(0, 'Alinhando relógios...');
+    s0 = await sincronizar();
+    await espera(6000);
+    const s1 = await sincronizar();
+    taxa = (s1.me - s0.me) / (s1.tc - s0.tc);
+    if (!(taxa > 0.2 && taxa < 5)) taxa = 1;
+
+    // ---- atuadores ----
+    const atuadores = [
+      { k: 'rele',    sub: 'ventilacao/comando', cmd: i => (i % 2 ? 'OFF' : 'ON') },
+      { k: 'buzzer',  sub: 'alarme/comando',     cmd: () => 'TESTE' },
+      { k: 'leds',    sub: 'leds/comando',       cmd: () => 'TESTE' },
+      { k: 'display', sub: 'display/comando',    cmd: () => 'MSG' } ];
+    for (const a of atuadores) {
+      for (let i = 0; i < 4; i++) {
+        progresso(feitos / total, `Medindo ${NOMES[a.k]} (${i + 1}/4)...`);
+        const sa = await sincronizar();
+        const corpo = { cmd: a.cmd(i), id: novoId(a.k), texto: `Teste ${i + 1}` };
+        const r = await enviarEAguardar(a.sub, corpo);
+        const sb = await sincronizar();
+        const tAcao = (paraPainel(r.ms, sa) + paraPainel(r.ms, sb)) / 2;
+        resultados.push({ k: a.k, ms: tAcao - corpo._tEnvio, rtt: r.t - corpo._tEnvio, rttPing: (sa.rtt + sb.rtt) / 2 });
+        feitos++; desenharResultados();
+        await espera(1500);
+      }
+    }
+    publicar('ventilacao/comando', JSON.stringify({ cmd: 'AUTO', id: novoId('fim') }));
+
+    // ---- sensores ----
+    for (let i = 0; i < 4; i++) {
+      progresso(feitos / total, `Aguardando medição dos sensores (${i + 1}/4)...`);
+      const r = await new Promise((res, rej) => { ouvintesMedicao.push(res); setTimeout(() => rej(new Error('nenhuma medição recebida')), 30000); });
+      const s = await sincronizar();
+      resultados.push({ k: 'co2', ms: r.t - paraPainel(r.m.t_co2, s), rtt: null, rttPing: s.rtt });
+      resultados.push({ k: 'dht', ms: r.t - paraPainel(r.m.t_dht, s), rtt: null, rttPing: s.rtt });
+      feitos += 2; desenharResultados();
+    }
+    progresso(1, `Concluído em ${hora()}. Taxa de simulação estimada: ${(taxa * 100).toFixed(0)}%.`);
+    $('btCSV').disabled = false; $('btPNG').disabled = false;
+  } catch (e) {
+    progresso(feitos / total, 'Erro: ' + e.message + '. Confira se o ESP32 está online e tente de novo.');
+  }
+  $('btMedir').disabled = false;
+};
+
+const ordem = ['co2', 'dht', 'rele', 'buzzer', 'leds', 'display'];
+const cores = { co2: '#1f5fa8', dht: '#3c9bd6', rele: '#2e9d4f', buzzer: '#d9a400', leds: '#d64535', display: '#7b4fb0' };
+const grafT = new Chart($('graficoTempos'), {
+  type: 'bar', data: { labels: ['Medida 1', 'Medida 2', 'Medida 3', 'Medida 4', 'Média'], datasets: [] },
+  options: { animation: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Tempo de resposta por sensor/atuador (ms)' } },
+             scales: { y: { beginAtZero: true, title: { display: true, text: 'ms' } } } } });
+
+function desenharResultados() {
+  const tb = $('tabMedidas'); tb.innerHTML = ''; let n = 0;
+  grafT.data.datasets = [];
+  for (const k of ordem) {
+    const rs = resultados.filter(r => r.k === k); if (!rs.length) continue;
+    rs.forEach(r => { const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${++n}</td><td>${NOMES[k]}</td><td>${r.ms.toFixed(1)}</td><td>${r.rtt == null ? '-' : r.rtt.toFixed(1)}</td>`; tb.append(tr); });
+    const media = rs.reduce((a, r) => a + r.ms, 0) / rs.length;
+    const tr = document.createElement('tr'); tr.className = 'media';
+    tr.innerHTML = `<td></td><td>Média - ${NOMES[k]}</td><td>${media.toFixed(1)}</td><td></td>`; tb.append(tr);
+    grafT.data.datasets.push({ label: NOMES[k], backgroundColor: cores[k], data: [...rs.map(r => +r.ms.toFixed(1)), ...Array(4 - rs.length).fill(null), +media.toFixed(1)] });
+  }
+  grafT.update();
+}
+
+$('btCSV').onclick = () => {
+  let csv = 'num;sensor_atuador;tempo_resposta_ms;ida_e_volta_ms;rtt_ping_ms\n'; let n = 0;
+  for (const k of ordem) resultados.filter(r => r.k === k).forEach(r =>
+    csv += `${++n};${NOMES[k]};${r.ms.toFixed(1)};${r.rtt == null ? '' : r.rtt.toFixed(1)};${r.rttPing.toFixed(1)}\n`);
+  csv += `# taxa_simulacao=${taxa.toFixed(4)};data=${new Date().toISOString()}\n`;
+  baixar(new Blob(['﻿' + csv], { type: 'text/csv' }), 'tempos_de_resposta.csv');
+};
+$('btPNG').onclick = () => { const a = document.createElement('a'); a.href = $('graficoTempos').toDataURL('image/png'); a.download = 'grafico_tempos.png'; a.click(); };
+function baixar(blob, nome) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; a.click(); }
+
+// conecta automaticamente ao abrir
+$('btConectar').click();
+</script>
+</body>
+</html>
