@@ -570,7 +570,7 @@ void setup() {
   mqtt.setServer(MQTT_HOST, MQTT_PORTA);
   mqtt.setCallback(aoReceberMensagem);
   mqtt.setBufferSize(512);
-  mqtt.setKeepAlive(15);
+  mqtt.setKeepAlive(60);  // folga para a simulação, que pode rodar abaixo de 100%
   mqtt.setSocketTimeout(5);
   Serial.println("Monitor de qualidade do ar - iniciado");
 }

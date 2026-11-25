@@ -28,7 +28,7 @@ Arquivo: [`firmware/monitor_ar/monitor_ar.ino`](../firmware/monitor_ar/monitor_a
 
 | Função | Descrição |
 |---|---|
-| `setup()` | configura pinos (relé começa desligado), UART2, desliga a autocalibração do MH-Z19B, DHT22, OLED, Wi-Fi e cliente MQTT (buffer 512 B, keep-alive 15 s) |
+| `setup()` | configura pinos (relé começa desligado), UART2, desliga a autocalibração do MH-Z19B, DHT22, OLED, Wi-Fi e cliente MQTT (buffer 512 B, keep-alive 60 s) |
 | `loop()` | `manterConexao()`, `mqtt.loop()`, `lerBotao()`, ciclo de medição no intervalo, republicação do estado a cada 60 s, LEDs, buzzer e tela |
 | `checksumMHZ()` | checksum do protocolo do MH-Z19B |
 | `lerCO2()` | envia o pedido 0x86, espera até 200 ms pela resposta, valida e devolve ppm (ou −1) |
