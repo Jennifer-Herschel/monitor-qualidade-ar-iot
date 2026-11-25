@@ -481,14 +481,23 @@ void aoReceberMensagem(char *topico, uint8_t *payload, unsigned int tam) {
 
 /** Conecta (ou reconecta) ao Wi-Fi e ao broker sem travar o laço principal. */
 void manterConexao() {
-  if (millis() - ultimaReconexao < RECONEXAO_MS && ultimaReconexao != 0) return;
+  if (WiFi.status() == WL_CONNECTED && mqtt.connected()) return;
+  if (WiFi.status() == WL_CONNECTED && millis() - ultimaReconexao < RECONEXAO_MS && ultimaReconexao != 0) return;
   if (WiFi.status() != WL_CONNECTED) {
-    ultimaReconexao = millis();
-    Serial.println("[WiFi] conectando...");
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_SENHA, 6);
+    // A primeira tentativa começa no setup(). Só reinicia a conexão se ela
+    // continuar caída por 30 s, para não interromper uma conexão em andamento.
+    static uint32_t semWifiDesde = 0;
+    if (semWifiDesde == 0) semWifiDesde = millis();
+    if (millis() - semWifiDesde > 30000UL) {
+      Serial.println("[WiFi] nova tentativa");
+      WiFi.disconnect();
+      WiFi.begin(WIFI_SSID, WIFI_SENHA, 6);
+      semWifiDesde = millis();
+    }
     return;
   }
+  static bool wifiAvisado = false;
+  if (!wifiAvisado) { Serial.printf("[WiFi] conectado, IP %s\n", WiFi.localIP().toString().c_str()); wifiAvisado = true; }
   if (mqtt.connected()) return;
   ultimaReconexao = millis();
 
@@ -556,6 +565,8 @@ void setup() {
   tela.display();
 
   WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_SENHA, 6);
+  Serial.println("[WiFi] conectando...");
   mqtt.setServer(MQTT_HOST, MQTT_PORTA);
   mqtt.setCallback(aoReceberMensagem);
   mqtt.setBufferSize(512);
