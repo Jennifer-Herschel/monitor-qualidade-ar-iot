@@ -1,0 +1,26 @@
+num;sensor_atuador;tempo_resposta_ms;estimativa_unidirecional_ms;rtt_ping_ms
+1;Sensor de CO₂ (MH-Z19B);545.5;545.5;689.9
+2;Sensor de CO₂ (MH-Z19B);828.7;828.7;682.8
+3;Sensor de CO₂ (MH-Z19B);1012.2;1012.2;691.5
+4;Sensor de CO₂ (MH-Z19B);535.4;535.4;694.9
+5;Sensor DHT22 (temp./umidade);534.0;534.0;689.9
+6;Sensor DHT22 (temp./umidade);817.2;817.2;682.8
+7;Sensor DHT22 (temp./umidade);1000.7;1000.7;691.5
+8;Sensor DHT22 (temp./umidade);523.9;523.9;694.9
+9;Relé / ventoinha;727.4;317.2;720.7
+10;Relé / ventoinha;777.3;242.8;726.8
+11;Relé / ventoinha;744.7;406.1;728.6
+12;Relé / ventoinha;715.3;379.3;720.0
+13;Buzzer;795.9;108.7;741.0
+14;Buzzer;742.7;381.6;767.4
+15;Buzzer;756.1;630.2;734.1
+16;Buzzer;780.2;707.6;722.3
+17;LEDs indicadores;784.5;341.5;701.6
+18;LEDs indicadores;796.3;723.2;726.5
+19;LEDs indicadores;729.7;468.2;732.2
+20;LEDs indicadores;796.5;224.3;718.3
+21;Display OLED;877.3;94.7;706.0
+22;Display OLED;968.3;588.3;720.7
+23;Display OLED;811.3;423.5;709.4
+24;Display OLED;809.1;917.7;747.2
+# medicao em 2026-11-25 17:10 (BRT), simulacao Wokwi a ~52% da velocidade real; atuadores: envio do comando ate a chegada da confirmacao da acao (mesmo relogio); sensores: deteccao no ESP32 ate o recebimento, com relogios alinhados por ping/pong

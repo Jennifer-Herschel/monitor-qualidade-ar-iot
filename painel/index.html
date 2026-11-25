@@ -112,16 +112,16 @@
 
   <section class="card s12"><h2>Medição dos tempos de resposta</h2>
     <p class="mut" style="margin-top:0">Faz 4 medições para cada sensor e cada atuador.
-      Atuadores: tempo entre o envio do comando pelo painel e a ação no ESP32.
-      Sensores: tempo entre a detecção no ESP32 e o recebimento da mensagem no painel.
-      Os relógios do painel e do ESP32 são alinhados por mensagens de ping/pong antes de cada medida.</p>
+      Atuadores: do envio do comando pelo painel até a confirmação da ação chegar de volta (mesmo relógio).
+      Sensores: da leitura no ESP32 até o recebimento da mensagem no painel, com os relógios alinhados por ping/pong.
+      Deixe a aba do simulador visível: em segundo plano o Wokwi fica muito mais lento.</p>
     <button id="btMedir">Iniciar medição</button>
     <button class="sec" id="btCSV" disabled>Baixar CSV</button>
     <button class="sec" id="btPNG" disabled>Baixar gráfico (PNG)</button>
     <span id="stMedicao" class="mut"></span>
     <div id="progresso"><div></div></div>
     <div class="row" style="align-items:start">
-      <div style="flex:1 1 420px"><table><thead><tr><th>Núm. medida</th><th>Sensor/atuador</th><th>Tempo de resposta (ms)</th><th>Ida e volta (ms)</th></tr></thead><tbody id="tabMedidas"></tbody></table></div>
+      <div style="flex:1 1 420px"><table><thead><tr><th>Núm. medida</th><th>Sensor/atuador</th><th>Tempo de resposta (ms)</th><th>Estimativa só de ida (ms)</th></tr></thead><tbody id="tabMedidas"></tbody></table></div>
       <div style="flex:1 1 520px"><canvas id="graficoTempos" height="210"></canvas></div>
     </div>
   </section>
@@ -313,7 +313,7 @@ $('btMedir').onclick = async () => {
         const r = await enviarEAguardar(a.sub, corpo);
         const sb = await sincronizar();
         const tAcao = (paraPainel(r.ms, sa) + paraPainel(r.ms, sb)) / 2;
-        resultados.push({ k: a.k, ms: tAcao - corpo._tEnvio, rtt: r.t - corpo._tEnvio, rttPing: (sa.rtt + sb.rtt) / 2 });
+        resultados.push({ k: a.k, ms: r.t - corpo._tEnvio, rtt: tAcao - corpo._tEnvio, rttPing: (sa.rtt + sb.rtt) / 2 });
         feitos++; desenharResultados();
         await espera(1500);
       }
@@ -360,7 +360,7 @@ function desenharResultados() {
 }
 
 $('btCSV').onclick = () => {
-  let csv = 'num;sensor_atuador;tempo_resposta_ms;ida_e_volta_ms;rtt_ping_ms\n'; let n = 0;
+  let csv = 'num;sensor_atuador;tempo_resposta_ms;estimativa_unidirecional_ms;rtt_ping_ms\n'; let n = 0;
   for (const k of ordem) resultados.filter(r => r.k === k).forEach(r =>
     csv += `${++n};${NOMES[k]};${r.ms.toFixed(1)};${r.rtt == null ? '' : r.rtt.toFixed(1)};${r.rttPing.toFixed(1)}\n`);
   csv += `# taxa_simulacao=${taxa.toFixed(4)};data=${new Date().toISOString()}\n`;

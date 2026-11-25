@@ -6,10 +6,10 @@ A medição é feita pelo próprio painel web, no cartão **Medição dos tempos
 |---|---|
 | Sensor de CO₂ (MH-Z19B) | leitura no ESP32 (`t_co2`) → chegada da medição ao painel |
 | Sensor DHT22 | leitura no ESP32 (`t_dht`) → chegada da medição ao painel |
-| Relé / ventoinha | envio do comando pelo painel → `digitalWrite` no ESP32 (`ms` da confirmação) |
-| Buzzer | envio do comando → início do som |
-| LEDs | envio do comando → LEDs acesos |
-| Display OLED | envio do comando → tela redesenhada |
+| Relé / ventoinha | envio do comando pelo painel → chegada da confirmação publicada logo após o `digitalWrite` |
+| Buzzer | envio do comando → confirmação após iniciar o som |
+| LEDs | envio do comando → confirmação após acender os LEDs |
+| Display OLED | envio do comando → confirmação após redesenhar a tela |
 
 ## Alinhamento dos relógios
 
@@ -26,3 +26,20 @@ Erro máximo: metade do RTT do ping usado. O painel também registra o tempo tot
 ## Resultado
 
 O botão **Baixar CSV** gera `tempos_de_resposta.csv` (colunas: número, sensor/atuador, tempo de resposta, ida e volta, RTT do ping) e **Baixar gráfico** gera o PNG. Os arquivos da medição usada no artigo ficam em [`../resultados/`](../resultados/).
+
+Para os atuadores, o tempo é medido do envio até a confirmação voltar, com o mesmo relógio (o do navegador), e por isso não depende do alinhamento. Ele é o limite superior do tempo até a ação. A estimativa só de ida, feita com o alinhamento de relógios, também é registrada.
+
+**Importante:** deixe a aba do Wokwi visível durante a medição. Em segundo plano o navegador reduz a velocidade da simulação, e o ESP32 pode perder a conexão com o broker.
+
+## Medição usada no artigo
+
+25/11/2026, simulação a cerca de 52% da velocidade real, ESP32 no Wokwi e painel no mesmo computador, internet pela rede do celular. Arquivo: [`../resultados/tempos_de_resposta.csv`](../resultados/tempos_de_resposta.csv).
+
+| Sensor/atuador | Média (ms) |
+|---|---|
+| Sensor de CO₂ (MH-Z19B) | 730,5 |
+| Sensor DHT22 | 719,0 |
+| Relé / ventoinha | 741,2 |
+| Buzzer | 768,7 |
+| LEDs | 776,8 |
+| Display OLED | 866,5 |
