@@ -13,7 +13,7 @@ Autora: **Jennifer Herschel Maia** · Professor tutor: André Luis de Oliveira
 | O quê | Onde |
 |---|---|
 | Painel web (MQTT pelo navegador) | https://jennifer-herschel.github.io/monitor-qualidade-ar-iot/painel/ |
-| Simulação no Wokwi | _link adicionado após a publicação do projeto_ |
+| Simulação no Wokwi | https://wokwi.com/projects/481884192573757441 |
 | Vídeo de demonstração | _link adicionado após a publicação do vídeo_ |
 
 ## Como funciona
@@ -53,6 +53,7 @@ resultados/                          medições e capturas de tela
 
 ### Opção 1: no simulador Wokwi (sem hardware)
 
+0. Mais rápido: abra o projeto pronto em https://wokwi.com/projects/481884192573757441 e pule para o passo 5. Ou monte do zero:
 1. Acesse https://wokwi.com/projects/new/esp32 (faça login para poder salvar).
 2. Substitua o conteúdo de `sketch.ino` pelo arquivo `firmware/monitor_ar/monitor_ar.ino`.
 3. Substitua o conteúdo de `diagram.json` pelo arquivo `wokwi/diagram.json`.
